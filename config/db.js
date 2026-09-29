@@ -1,23 +1,39 @@
-import mongoose from 'mongoose';
-import User from '../models/User.js';
+import dns from "node:dns";
+
+dns.setServers(["8.8.8.8", "8.8.4.4"]);
+
+import mongoose from "mongoose";
+import User from "../models/User.js";
 
 export default async function connectDB() {
-  const uri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/teamcollab';
-  mongoose.set('strictQuery', true);
-  const conn = await mongoose.connect(uri);
-  const dbName = conn.connection.name;
-  console.log(`MongoDB connected: ${conn.connection.host}/${dbName}`);
+  const uri = process.env.MONGO_URI;
 
-  if (dbName === 'test') {
-    console.warn(
-      'Warning: using the default "test" database. Put the database name before the "?" in MONGO_URI, ' +
-        'e.g. mongodb+srv://user:pass@cluster.mongodb.net/teamcollab?appName=Cluster0'
-    );
+  if (!uri) {
+    throw new Error("MONGO_URI is not defined in environment variables");
   }
 
-  // Drop unique indexes left over from other apps (e.g. "username_1") that would block signups
-  const dropped = await User.syncIndexes();
-  if (dropped.length) console.log(`Removed stale user indexes: ${dropped.join(', ')}`);
+  mongoose.set("strictQuery", true);
 
-  return conn;
+  try {
+    const conn = await mongoose.connect(uri, {
+      serverSelectionTimeoutMS: 10000,
+      connectTimeoutMS: 10000,
+    });
+
+    const dbName = conn.connection.name;
+
+    console.log(
+      `MongoDB connected: ${conn.connection.host}/${dbName}`
+    );
+
+    // Sync indexes
+    await User.syncIndexes();
+
+    console.log("User indexes synchronized");
+
+    return conn;
+  } catch (error) {
+    console.error("Failed to connect to MongoDB:", error);
+    throw error;
+  }
 }
